@@ -1,5 +1,5 @@
 
-# react-native-stripe
+# 💳 react-native-stripe
 
 ## Installation
 
@@ -44,7 +44,7 @@ const customerKeySubscription = stripeEventEmitter.addListener(
 // This event is received when the payment method changes
 const paymentMethodSubscription = stripeEventEmitter.addListener(
     'RNStripeSelectedPaymentMethodDidChange',
-    function(selectedPaymentMethod){ {
+    function(selectedPaymentMethod){
         // undefined if no payment method is selected
         // otherwise contains:
         // [string] `label`: card type and last 4 digits (es. `Visa 4444`)
