@@ -24,10 +24,90 @@ RCT_EXPORT_MODULE();
     return @[@"RNStripeRequestedCustomerKey", @"RNStripeSelectedPaymentMethodDidChange"];
 }
 
-- (void)createCustomerKeyWithAPIVersion:(NSString *)apiVersion completion:(STPJSONResponseCompletionBlock)completion
+RCT_EXPORT_METHOD(initWithPublishableKey:(NSString *)publishableKey
+                                resolver:(RCTPromiseResolveBlock)resolve
+                                rejecter:(RCTPromiseRejectBlock)reject)
 {
+    NSLog(@"RNStripe: initWithPublishableKey");
+    if (publishableKey == nil) {
+        [NSException raise:@"Publishable Key Required"
+                    format:@"A valid Stripe publishable key is required"];
+    }
+
+    [Stripe setDefaultPublishableKey:publishableKey];
+    [[STPPaymentConfiguration sharedConfiguration] setPublishableKey:publishableKey];
+
+    resolve(@YES);
+};
+
+- (void)createCustomerKeyWithAPIVersion:(NSString *)apiVersion
+                             completion:(STPJSONResponseCompletionBlock)completion
+{
+    NSLog(@"RNStripe: createCustomerKeyWithAPIVersion");
+
     customerKeyCompletionBlock = completion;
-    [self sendEventWithName:@"RNStripeRequestedCustomerKey" body:@{@"apiVersion": apiVersion}];
+
+    [self sendEventWithName:@"RNStripeRequestedCustomerKey"
+                       body:@{
+                              @"apiVersion": apiVersion
+                            }];
+}
+
+RCT_EXPORT_METHOD(retrievedCustomerKey:(NSDictionary*)customerKey)
+{
+    NSLog(@"RNStripe: retrievedCustomerKey");
+    
+    NSError * error;
+    if (customerKeyCompletionBlock != nil) {
+        customerKeyCompletionBlock(customerKey, error);
+    }
+}
+
+RCT_EXPORT_METHOD(failedRetrievingCustomerKey)
+{
+    NSLog(@"RNStripe: failedRetrievingCustomerKey");
+
+    if (customerKeyCompletionBlock != nil) {
+        customerKeyCompletionBlock(nil, nil);
+    }
+}
+
+RCT_EXPORT_METHOD(initPaymentContext:(NSDictionary*)options
+                  resolver:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+    NSNumber * amount = options[@"amount"];
+    if (amount == nil) {
+        [NSException raise:@"Amount Required"
+                    format:@"A valid integer amount is required"];
+    }
+    
+    STPPaymentConfiguration * config = [[STPPaymentConfiguration alloc] init];
+    
+    // Forces card requirements to full address. Check `STPBillingAddress` for other options
+    //[config setRequiredBillingAddressFields: STPBillingAddressFieldsFull];
+
+    customerContext = [[STPCustomerContext alloc] initWithKeyProvider:self];
+
+    paymentContext = [[STPPaymentContext alloc]
+                      initWithCustomerContext:customerContext
+                      configuration:config
+                      theme:[STPTheme defaultTheme]];
+    paymentContext.paymentCountry = @"IT";
+    paymentContext.delegate = self;
+    paymentContext.paymentAmount = [amount intValue];
+    paymentContext.paymentCurrency = @"eur";
+    
+    resolve(@YES);
+}
+
+RCT_EXPORT_METHOD(presentPaymentMethodsViewController:(RCTPromiseResolveBlock)resolve
+                  rejecter:(RCTPromiseRejectBlock)reject)
+{
+    paymentContext.hostViewController = RCTPresentedViewController();
+    [paymentContext presentPaymentMethodsViewController];
+    
+    resolve(@YES);
 }
 
 - (void)paymentContextDidChange:(STPPaymentContext *)paymentContext
@@ -37,9 +117,9 @@ RCT_EXPORT_MODULE();
         && [paymentContext.selectedPaymentMethod isEqual: lastSelectedPaymentMethod]) {
         // Converts the template image to a base64 string
         UIImage * templateImage = paymentContext.selectedPaymentMethod.templateImage;
-        NSString * cardTemplateImage = [UIImageJPEGRepresentation(templateImage, 1.0)
-                                        base64EncodedStringWithOptions:nil];
+        NSString * cardTemplateImage = [UIImageJPEGRepresentation(templateImage, 1.0) base64EncodedStringWithOptions:nil];
         NSString * cardLabel = paymentContext.selectedPaymentMethod.label;
+
         [self sendEventWithName:@"RNStripeSelectedPaymentMethodDidChange"
                            body:@{@"label": cardLabel, @"templateImage": cardTemplateImage}];
         
@@ -49,61 +129,25 @@ RCT_EXPORT_MODULE();
     }
 }
 
+- (void)paymentContext:(nonnull STPPaymentContext *)paymentContext
+didCreatePaymentResult:(nonnull STPPaymentResult *)paymentResult
+            completion:(nonnull STPErrorBlock)completion {
+    NSLog(@"RNStripe: PaymentContextDidCreatePaymentResult");
+}
+
+
+- (void)paymentContext:(nonnull STPPaymentContext *)paymentContext
+   didFinishWithStatus:(STPPaymentStatus)status
+                 error:(nullable NSError *)error {
+    NSLog(@"RNStripe: PaymentContextDidFinishWithStatusError");
+}
+
 - (void)paymentContext:(STPPaymentContext *)paymentContext
-    didFailToLoadWithError:(NSError *)error
+didFailToLoadWithError:(NSError *)error
 {
+    NSLog(@"RNStripe: PaymentContextDidFailToLoadWithError");
     [self sendEventWithName:@"RNStripeSelectedPaymentMethodDidChange" body:nil];
 }
 
-RCT_EXPORT_METHOD(initPaymentContext:(NSDictionary*)options
-                  presentPaymentMethodsViewController:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject)
-{
-    NSString * publishableKey = options[@"publishableKey"];
-    if (publishableKey == nil) {
-        [NSException raise:@"Publishable Key Required" format:@"A valid Stripe publishable key is required"];
-    }
-    NSNumber * amount = options[@"amount"];
-    if (publishableKey == nil) {
-        [NSException raise:@"Amount Required" format:@"A valid integer amount is required"];
-    }
-
-    [Stripe setDefaultPublishableKey:publishableKey];
-
-    STPPaymentConfiguration * config = [[STPPaymentConfiguration alloc] init];
-    
-    // Forces card requirements to full address. Check `STPBillingAddress` for other options
-    [config setRequiredBillingAddressFields: STPBillingAddressFieldsFull];
-    customerContext = [[STPCustomerContext alloc] initWithKeyProvider:self];
-    paymentContext = [[STPPaymentContext alloc]
-                      initWithCustomerContext:customerContext
-                      configuration:config theme:[STPTheme defaultTheme]];
-    paymentContext.paymentCountry = @"IT";
-    paymentContext.delegate = self;
-    paymentContext.paymentAmount = [amount intValue];
-    paymentContext.paymentCurrency = @"eur";
-}
-
-RCT_EXPORT_METHOD(retrievedCustomerKey:(NSDictionary*)customerKey)
-{
-    NSError * error;
-    if (customerKeyCompletionBlock != nil) {
-        customerKeyCompletionBlock(customerKey, error);
-    }
-}
-
-RCT_EXPORT_METHOD(failedRetrievingCustomerKey)
-{
-    if (customerKeyCompletionBlock != nil) {
-        customerKeyCompletionBlock(nil, nil);
-    }
-}
-
-RCT_EXPORT_METHOD(presentPaymentMethodsViewController:(RCTPromiseResolveBlock)resolve
-                  rejecter:(RCTPromiseRejectBlock)reject)
-{
-    paymentContext.hostViewController = RCTPresentedViewController();
-    [paymentContext presentPaymentMethodsViewController];
-}
 
 @end
