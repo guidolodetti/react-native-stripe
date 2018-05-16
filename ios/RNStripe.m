@@ -56,10 +56,9 @@ RCT_EXPORT_METHOD(initWithPublishableKey:(NSString *)publishableKey
 RCT_EXPORT_METHOD(retrievedCustomerKey:(NSDictionary*)customerKey)
 {
     NSLog(@"RNStripe: retrievedCustomerKey");
-    
-    NSError * error;
+
     if (customerKeyCompletionBlock != nil) {
-        customerKeyCompletionBlock(customerKey, error);
+        customerKeyCompletionBlock(customerKey, nil);
     }
 }
 
@@ -67,8 +66,9 @@ RCT_EXPORT_METHOD(failedRetrievingCustomerKey)
 {
     NSLog(@"RNStripe: failedRetrievingCustomerKey");
 
+    NSError * error;
     if (customerKeyCompletionBlock != nil) {
-        customerKeyCompletionBlock(nil, nil);
+        customerKeyCompletionBlock(nil, error);
     }
 }
 
@@ -81,14 +81,14 @@ RCT_EXPORT_METHOD(initPaymentContext:(NSDictionary*)options
         [NSException raise:@"Amount Required"
                     format:@"A valid integer amount is required"];
     }
-    
-    STPPaymentConfiguration * config = [[STPPaymentConfiguration alloc] init];
-    
-    // Forces card requirements to full address. Check `STPBillingAddress` for other options
-    //[config setRequiredBillingAddressFields: STPBillingAddressFieldsFull];
 
     customerContext = [[STPCustomerContext alloc] initWithKeyProvider:self];
 
+    STPPaymentConfiguration* config = [[STPPaymentConfiguration sharedConfiguration] copy];
+
+    // Forces card requirements to full address. Check `STPBillingAddress` for other options
+    [config setRequiredBillingAddressFields: STPBillingAddressFieldsFull];
+    
     paymentContext = [[STPPaymentContext alloc]
                       initWithCustomerContext:customerContext
                       configuration:config
