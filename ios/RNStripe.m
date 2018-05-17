@@ -114,18 +114,21 @@ RCT_EXPORT_METHOD(presentPaymentMethodsViewController:(RCTPromiseResolveBlock)re
 {
     // Checks if a selected method is available and sends an event (only if different from previous)
     if (paymentContext.selectedPaymentMethod != nil
-        && [paymentContext.selectedPaymentMethod isEqual: lastSelectedPaymentMethod]) {
+        && ![paymentContext.selectedPaymentMethod isEqual: lastSelectedPaymentMethod]) {
+
         // Converts the template image to a base64 string
         UIImage * templateImage = paymentContext.selectedPaymentMethod.templateImage;
         NSString * cardTemplateImage = [UIImageJPEGRepresentation(templateImage, 1.0) base64EncodedStringWithOptions:nil];
         NSString * cardLabel = paymentContext.selectedPaymentMethod.label;
 
+        // Send updated info to JS
         [self sendEventWithName:@"RNStripeSelectedPaymentMethodDidChange"
-                           body:@{@"label": cardLabel, @"templateImage": cardTemplateImage}];
+                           body:@{
+                                  @"label": cardLabel,
+                                  @"templateImage": cardTemplateImage
+                                }];
         
         lastSelectedPaymentMethod = paymentContext.selectedPaymentMethod;
-    } else {
-        [self sendEventWithName:@"RNStripeSelectedPaymentMethodDidChange" body:nil];
     }
 }
 
