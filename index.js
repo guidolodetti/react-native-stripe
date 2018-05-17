@@ -6,7 +6,7 @@ class RNStripeManager {
   _ephemeralKeyProviderFn = undefined;
   _customerKeySubscription = undefined;
 
-  init({ publishableKey, ephemeralKeyProviderFn }) {
+  init({ publishableKey, ephemeralKeyProviderFn, appleMerchantId }) {
     if (!ephemeralKeyProviderFn) {
       throw "ephemeralKeyProviderFn option is required!";
     }
@@ -31,7 +31,7 @@ class RNStripeManager {
       });
     }
 
-    return RNStripe.initWithPublishableKey(publishableKey);
+    return RNStripe.initWithOptions({ publishableKey, appleMerchantId });
   }
 
   requestPayment(paymentContenxtOptions) {

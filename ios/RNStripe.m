@@ -24,18 +24,23 @@ RCT_EXPORT_MODULE();
     return @[@"RNStripeRequestedCustomerKey", @"RNStripeSelectedPaymentMethodDidChange"];
 }
 
-RCT_EXPORT_METHOD(initWithPublishableKey:(NSString *)publishableKey
-                                resolver:(RCTPromiseResolveBlock)resolve
-                                rejecter:(RCTPromiseRejectBlock)reject)
+RCT_EXPORT_METHOD(initWithOptions:(NSDictionary*)options
+                         resolver:(RCTPromiseResolveBlock)resolve
+                         rejecter:(RCTPromiseRejectBlock)reject)
 {
-    NSLog(@"RNStripe: initWithPublishableKey");
+    NSLog(@"RNStripe: initWithOptions");
+    NSString* publishableKey = options[@"publishableKey"];
     if (publishableKey == nil) {
-        [NSException raise:@"Publishable Key Required"
-                    format:@"A valid Stripe publishable key is required"];
+        reject(@"RNStripePublishableKeyRequired", @"A valid Stripe PublishableKey is required", nil);
+        return;
     }
 
     [Stripe setDefaultPublishableKey:publishableKey];
     [[STPPaymentConfiguration sharedConfiguration] setPublishableKey:publishableKey];
+    
+    // Set 'Apple MerchantId' if supplied
+    NSString* appleMerchantId = options[@"appleMerchantId"];
+    [[STPPaymentConfiguration sharedConfiguration] setAppleMerchantIdentifier:appleMerchantId];
 
     resolve(@YES);
 };
