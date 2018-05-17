@@ -2,13 +2,12 @@
 #import <React/RCTUtils.h>
 
 @implementation RNStripe {
-    RCTPromiseResolveBlock promiseResolver;
-    RCTPromiseRejectBlock promiseRejector;
+    RCTPromiseResolveBlock initPaymentContextPromiseResolver;
 
     STPPaymentContext * paymentContext;
     STPCustomerContext * customerContext;
     STPJSONResponseCompletionBlock customerKeyCompletionBlock;
-    
+
     id lastSelectedPaymentMethod;
 }
 
@@ -78,13 +77,11 @@ RCT_EXPORT_METHOD(failedRetrievingCustomerKey)
 }
 
 RCT_EXPORT_METHOD(initPaymentContext:(NSDictionary*)options
-                  resolver:(RCTPromiseResolveBlock)resolve
+                  resolver:(RCTPromiseResolveBlock)resolver
                   rejecter:(RCTPromiseRejectBlock)reject)
 {
-    NSNumber * amount = options[@"amount"];
-    if (amount == nil) {
-        [NSException raise:@"Amount Required"
-                    format:@"A valid integer amount is required"];
+    if (initPaymentContextPromiseResolver != nil) {
+        reject(@"RNStripeInitPaymentInProgress", @"initPaymentContext already called, but initialization is not yet completed.", nil);
     }
 
     customerContext = [[STPCustomerContext alloc] initWithKeyProvider:self];
@@ -98,18 +95,23 @@ RCT_EXPORT_METHOD(initPaymentContext:(NSDictionary*)options
                       initWithCustomerContext:customerContext
                       configuration:config
                       theme:[STPTheme defaultTheme]];
-    paymentContext.paymentCountry = @"IT";
+
     paymentContext.delegate = self;
-    paymentContext.paymentAmount = [amount intValue];
-    paymentContext.paymentCurrency = @"eur";
-    
-    resolve(@YES);
+    paymentContext.hostViewController = RCTPresentedViewController();
+
+    if (options[@"amount"] != nil) {
+        NSNumber * amount = options[@"amount"];
+        paymentContext.paymentCountry = @"IT";
+        paymentContext.paymentAmount = [amount intValue];
+        paymentContext.paymentCurrency = @"eur";
+    }
+
+    initPaymentContextPromiseResolver = resolver;
 }
 
 RCT_EXPORT_METHOD(presentPaymentMethodsViewController:(RCTPromiseResolveBlock)resolve
                   rejecter:(RCTPromiseRejectBlock)reject)
 {
-    paymentContext.hostViewController = RCTPresentedViewController();
     [paymentContext presentPaymentMethodsViewController];
 
     resolve(@YES);
@@ -117,23 +119,28 @@ RCT_EXPORT_METHOD(presentPaymentMethodsViewController:(RCTPromiseResolveBlock)re
 
 - (void)paymentContextDidChange:(STPPaymentContext *)paymentContext
 {
-    // Checks if a selected method is available and sends an event (only if different from previous)
-    if (paymentContext.selectedPaymentMethod != nil
-        && ![paymentContext.selectedPaymentMethod isEqual: lastSelectedPaymentMethod]) {
+    NSDictionary* selectedCard = nil;
 
+    // Checks if a selected method is available
+    if (paymentContext.selectedPaymentMethod != nil) {
         // Converts the template image to a base64 string
         UIImage* templateImage = paymentContext.selectedPaymentMethod.templateImage;
-        NSString* cardTemplateImage = [UIImageJPEGRepresentation(templateImage, 1.0) base64EncodedStringWithOptions:NSDataBase64Encoding64CharacterLineLength];
+        NSString* cardTemplateImage = [UIImagePNGRepresentation(templateImage) base64EncodedStringWithOptions:NSDataBase64Encoding64CharacterLineLength];
         NSString* cardLabel = paymentContext.selectedPaymentMethod.label;
 
+        selectedCard = @{
+                         @"label": cardLabel,
+                         @"templateImage": cardTemplateImage
+                        };
+        
         // Send updated info to JS
         [self sendEventWithName:@"RNStripeSelectedPaymentMethodDidChange"
-                           body:@{
-                                  @"label": cardLabel,
-                                  @"templateImage": cardTemplateImage
-                                }];
-        
-        lastSelectedPaymentMethod = paymentContext.selectedPaymentMethod;
+                           body:selectedCard];
+    }
+
+    if (initPaymentContextPromiseResolver != nil) {
+        initPaymentContextPromiseResolver(selectedCard);
+        initPaymentContextPromiseResolver = nil;
     }
 }
 
