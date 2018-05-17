@@ -111,7 +111,7 @@ RCT_EXPORT_METHOD(presentPaymentMethodsViewController:(RCTPromiseResolveBlock)re
 {
     paymentContext.hostViewController = RCTPresentedViewController();
     [paymentContext presentPaymentMethodsViewController];
-    
+
     resolve(@YES);
 }
 
@@ -122,9 +122,9 @@ RCT_EXPORT_METHOD(presentPaymentMethodsViewController:(RCTPromiseResolveBlock)re
         && ![paymentContext.selectedPaymentMethod isEqual: lastSelectedPaymentMethod]) {
 
         // Converts the template image to a base64 string
-        UIImage * templateImage = paymentContext.selectedPaymentMethod.templateImage;
-        NSString * cardTemplateImage = [UIImageJPEGRepresentation(templateImage, 1.0) base64EncodedStringWithOptions:nil];
-        NSString * cardLabel = paymentContext.selectedPaymentMethod.label;
+        UIImage* templateImage = paymentContext.selectedPaymentMethod.templateImage;
+        NSString* cardTemplateImage = [UIImageJPEGRepresentation(templateImage, 1.0) base64EncodedStringWithOptions:NSDataBase64Encoding64CharacterLineLength];
+        NSString* cardLabel = paymentContext.selectedPaymentMethod.label;
 
         // Send updated info to JS
         [self sendEventWithName:@"RNStripeSelectedPaymentMethodDidChange"
