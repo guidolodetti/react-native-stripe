@@ -35,12 +35,14 @@ RNStripe.init({
   console.log("RNStripe: Initilization completed!");
 });
 
-// To request a Payment
-// The amount to charge the user is required and
-//  is in cents, (1$ == 100, 10$ == 1000)
-RNStripe.requestPayment({
-  amount: 100
-}).then(() => {
-  console.log("RNStripe: Payment requested!");
+// Get current chosen PaymentMethod
+RNStripe.getCurrentPaymentMethod().then(currentPaymentMethod => {
+  console.log({ currentPaymentMethod });
 });
+
+// To show the PaymentMethod Chooser screen
+RNStripe.showPaymentMethodChooser(newPaymentMethod => {
+  console.log({ newPaymentMethod });
+});
+// This method returns a Promise which you can use to know when the screen has been opened
 ```
