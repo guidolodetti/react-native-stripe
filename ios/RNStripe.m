@@ -1,5 +1,6 @@
 #import "RNStripe.h"
 #import <React/RCTUtils.h>
+#import <React/RCTConvert.h>
 
 @implementation RNStripe {
     RCTPromiseResolveBlock initPaymentContextPromiseResolver;
@@ -7,8 +8,6 @@
     STPPaymentContext * paymentContext;
     STPCustomerContext * customerContext;
     STPJSONResponseCompletionBlock customerKeyCompletionBlock;
-
-    id lastSelectedPaymentMethod;
 }
 
 RCT_EXPORT_MODULE();
@@ -40,6 +39,11 @@ RCT_EXPORT_METHOD(initWithOptions:(NSDictionary*)options
     // Set 'Apple MerchantId' if supplied
     NSString* appleMerchantId = options[@"appleMerchantId"];
     [[STPPaymentConfiguration sharedConfiguration] setAppleMerchantIdentifier:appleMerchantId];
+
+    // Setup default theme if supplied
+    if (options[@"theme"] != nil) {
+        [self setupDefaultThemeWithOptions:options[@"theme"]];
+    }
 
     resolve(@YES);
 };
@@ -164,5 +168,13 @@ didFailToLoadWithError:(NSError *)error
     [self sendEventWithName:@"RNStripeSelectedPaymentMethodDidChange" body:nil];
 }
 
+- (void)setupDefaultThemeWithOptions:(NSDictionary*)options {
+    [[STPTheme defaultTheme] setPrimaryBackgroundColor:[RCTConvert UIColor:options[@"primaryBackgroundColor"]]];
+    [[STPTheme defaultTheme] setSecondaryBackgroundColor:[RCTConvert UIColor:options[@"secondaryBackgroundColor"]]];
+    [[STPTheme defaultTheme] setPrimaryForegroundColor:[RCTConvert UIColor:options[@"primaryForegroundColor"]]];
+    [[STPTheme defaultTheme] setSecondaryForegroundColor:[RCTConvert UIColor:options[@"secondaryForegroundColor"]]];
+    [[STPTheme defaultTheme] setAccentColor:[RCTConvert UIColor:options[@"accentColor"]]];
+    [[STPTheme defaultTheme] setErrorColor:[RCTConvert UIColor:options[@"errorColor"]]];
+}
 
 @end

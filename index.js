@@ -1,4 +1,5 @@
 import { NativeEventEmitter, NativeModules } from "react-native";
+import processColor from "react-native/Libraries/StyleSheet/processColor";
 
 const { RNStripe } = NativeModules;
 
@@ -7,7 +8,7 @@ class RNStripeManager {
   _customerKeySubscription = undefined;
   _stripeEventEmitter = new NativeEventEmitter(RNStripe);
 
-  init({ publishableKey, ephemeralKeyProviderFn, appleMerchantId }) {
+  init({ publishableKey, ephemeralKeyProviderFn, appleMerchantId, theme }) {
     if (!ephemeralKeyProviderFn) {
       throw "ephemeralKeyProviderFn option is required!";
     }
@@ -34,7 +35,11 @@ class RNStripeManager {
       );
     }
 
-    return RNStripe.initWithOptions({ publishableKey, appleMerchantId });
+    return RNStripe.initWithOptions({
+      publishableKey,
+      appleMerchantId,
+      theme: processTheme(theme)
+    });
   }
 
   getCurrentPaymentMethod(paymentContenxtOptions) {
@@ -75,6 +80,16 @@ class RNStripeManager {
     this._unsubscribePaymentMethodChanges();
     this._unsubscribeCustomerKeyUpdates();
   }
+}
+
+function processTheme(theme = {}) {
+  return Object.keys(theme).reduce((result, key) => {
+    let value = theme[key];
+    if (key.toLowerCase().endsWith("color")) {
+      value = processColor(value);
+    }
+    return { ...result, [key]: value };
+  }, {});
 }
 
 const rnStripeMananger = new RNStripeManager();
