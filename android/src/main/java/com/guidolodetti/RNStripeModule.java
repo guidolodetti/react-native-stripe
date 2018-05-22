@@ -175,9 +175,9 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
                         }
 
                         final Map<String, Object> selectedCardDetails = new HashMap<>();
-                        selectedCardDetails.put("label", customerCard.getBrand() + " " + customerCard.getLast4());
-                        selectedCardDetails.put("cardTemplateImage", "");
-
+                        selectedCardDetails.put("brand", customerCard.getBrand());
+                        selectedCardDetails.put("last4", customerCard.getLast4());
+                        Log.e("RNStripe", selectedCardDetails.toString());
                         // Send the card information to JS
                         RNStripeModule.this.sendEvent("RNStripeSelectedPaymentMethodDidChange", Arguments.makeNativeMap(selectedCardDetails));
 

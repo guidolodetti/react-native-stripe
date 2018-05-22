@@ -127,19 +127,18 @@ RCT_EXPORT_METHOD(presentPaymentMethodsViewController:(RCTPromiseResolveBlock)re
 
     // Checks if a selected method is available
     if (paymentContext.selectedPaymentMethod != nil) {
-        // Converts the template image to a base64 string
-        UIImage* templateImage = paymentContext.selectedPaymentMethod.templateImage;
-        NSString* cardTemplateImage = [UIImagePNGRepresentation(templateImage) base64EncodedStringWithOptions:NSDataBase64Encoding64CharacterLineLength];
-        NSString* cardLabel = paymentContext.selectedPaymentMethod.label;
-
-        selectedCard = @{
-                         @"label": cardLabel,
-                         @"templateImage": cardTemplateImage
-                        };
-        
-        // Send updated info to JS
-        [self sendEventWithName:@"RNStripeSelectedPaymentMethodDidChange"
-                           body:selectedCard];
+        if ([paymentContext.selectedPaymentMethod isMemberOfClass:[STPCard class]]) {
+            STPCard * card = (STPCard*)paymentContext.selectedPaymentMethod;
+            NSString * brand = [STPCard stringFromBrand:card.brand];
+            NSString * last4 = card.last4;
+            selectedCard = @{
+                             @"brand": brand,
+                             @"last4": last4
+                             };
+            // Send updated info to JS
+            [self sendEventWithName:@"RNStripeSelectedPaymentMethodDidChange"
+                               body:selectedCard];
+        }
     }
 
     if (initPaymentContextPromiseResolver != nil) {
