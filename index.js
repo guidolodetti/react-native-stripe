@@ -60,6 +60,23 @@ class RNStripeManager {
     return RNStripe.presentPaymentMethodsViewController();
   }
 
+  getCardImageSourceFromBrand(imageBrand) {
+    switch (imageBrand) {
+      case 'Visa':
+        return require('./card-icons/stp_card_visa.png');
+      case 'MasterCard':
+        return require('./card-icons/stp_card_mastercard.png');
+      case 'American Express':
+        return require('./card-icons/stp_card_amex.png');
+      case 'Discover':
+        return require('./card-icons/stp_card_discover.png');
+      case 'Diners':
+        return require('./card-icons/stp_card_diners.png');
+      default:
+        return require('./card-icons/stp_card_unknown.png');
+    }
+  }
+
   _unsubscribePaymentMethodChanges() {
     // Remove paymentMethodSubscription if any
     if (this._paymentMethodSubscription) {
