@@ -93,7 +93,7 @@ RCT_EXPORT_METHOD(initPaymentContext:(NSDictionary*)options
     STPPaymentConfiguration* config = [[STPPaymentConfiguration sharedConfiguration] copy];
 
     // Forces card requirements to full address. Check `STPBillingAddress` for other options
-    [config setRequiredBillingAddressFields: STPBillingAddressFieldsFull];
+    // [config setRequiredBillingAddressFields: STPBillingAddressFieldsFull];
     
     paymentContext = [[STPPaymentContext alloc]
                       initWithCustomerContext:customerContext
