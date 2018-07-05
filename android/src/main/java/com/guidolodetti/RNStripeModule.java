@@ -28,6 +28,8 @@ import com.stripe.android.PaymentSessionData;
 import com.stripe.android.model.Card;
 import com.stripe.android.model.Customer;
 import com.stripe.android.model.CustomerSource;
+import com.stripe.android.model.Source;
+import com.stripe.android.model.SourceCardData;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -166,7 +168,8 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
                         }
 
                         final Card customerCard = displaySource.asCard();
-                        if (customerCard == null) {
+                        final Source customerSource = displaySource.asSource();
+                        if (customerCard == null && !(customerSource.getSourceTypeModel() instanceof SourceCardData)) {
                             if (initPaymentContextPromise != null) {
                                 initPaymentContextPromise.resolve(null);
                                 initPaymentContextPromise = null;
@@ -175,8 +178,14 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
                         }
 
                         final Map<String, Object> selectedCardDetails = new HashMap<>();
-                        selectedCardDetails.put("brand", customerCard.getBrand());
-                        selectedCardDetails.put("last4", customerCard.getLast4());
+                        if (customerCard != null) {
+                            selectedCardDetails.put("brand", customerCard.getBrand());
+                            selectedCardDetails.put("last4", customerCard.getLast4());
+                        } else {
+                            SourceCardData cardData = ((SourceCardData)customerSource.getSourceTypeModel());
+                            selectedCardDetails.put("brand", cardData.getBrand());
+                            selectedCardDetails.put("last4", cardData.getLast4());
+                        }
                         Log.e("RNStripe", selectedCardDetails.toString());
                         // Send the card information to JS
                         RNStripeModule.this.sendEvent("RNStripeSelectedPaymentMethodDidChange", Arguments.makeNativeMap(selectedCardDetails));
