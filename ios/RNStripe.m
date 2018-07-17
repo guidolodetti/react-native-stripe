@@ -138,6 +138,17 @@ RCT_EXPORT_METHOD(presentPaymentMethodsViewController:(RCTPromiseResolveBlock)re
             // Send updated info to JS
             [self sendEventWithName:@"RNStripeSelectedPaymentMethodDidChange"
                                body:selectedCard];
+        } else if ([paymentContext.selectedPaymentMethod isMemberOfClass:[STPSource class]]) {
+            STPSourceCardDetails * card = ((STPSource*)paymentContext.selectedPaymentMethod).cardDetails;
+            NSString * brand = [STPCard stringFromBrand:card.brand];
+            NSString * last4 = card.last4;
+            selectedCard = @{
+                             @"brand": brand,
+                             @"last4": last4
+                             };
+            // Send updated info to JS
+            [self sendEventWithName:@"RNStripeSelectedPaymentMethodDidChange"
+                               body:selectedCard];
         }
     }
 
