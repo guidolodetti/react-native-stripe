@@ -49,7 +49,9 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
         @Override
         public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data) {
             super.onActivityResult(activity, requestCode, resultCode, data);
-            mPaymentSession.handlePaymentData(requestCode, resultCode, data);
+            if (mPaymentSession != null) {
+                mPaymentSession.handlePaymentData(requestCode, resultCode, data);
+            }
         }
     };
 
