@@ -1,7 +1,5 @@
 
 package com.guidolodetti;
-
-import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.support.annotation.NonNull;
@@ -174,7 +172,7 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
             Log.e("RNStripe 3D REQUIRED", threeDStatus);
 
             SourceParams threeDParams = SourceParams.createThreeDSecureParams(
-                    amount+100,
+                    amount,
                     "EUR",
                     "ugo://tickets",
                     activeSource.getId());
