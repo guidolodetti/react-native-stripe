@@ -93,7 +93,7 @@ RCT_EXPORT_METHOD(initPaymentContext:(NSDictionary*)options
     STPPaymentConfiguration* config = [[STPPaymentConfiguration sharedConfiguration] copy];
 
     // Forces card requirements to full address. Check `STPBillingAddress` for other options
-    [config setRequiredBillingAddressFields: STPBillingAddressFieldsFull];
+    // [config setRequiredBillingAddressFields: STPBillingAddressFieldsFull];
     
     paymentContext = [[STPPaymentContext alloc]
                       initWithCustomerContext:customerContext
@@ -129,6 +129,17 @@ RCT_EXPORT_METHOD(presentPaymentMethodsViewController:(RCTPromiseResolveBlock)re
     if (paymentContext.selectedPaymentMethod != nil) {
         if ([paymentContext.selectedPaymentMethod isMemberOfClass:[STPCard class]]) {
             STPCard * card = (STPCard*)paymentContext.selectedPaymentMethod;
+            NSString * brand = [STPCard stringFromBrand:card.brand];
+            NSString * last4 = card.last4;
+            selectedCard = @{
+                             @"brand": brand,
+                             @"last4": last4
+                             };
+            // Send updated info to JS
+            [self sendEventWithName:@"RNStripeSelectedPaymentMethodDidChange"
+                               body:selectedCard];
+        } else if ([paymentContext.selectedPaymentMethod isMemberOfClass:[STPSource class]]) {
+            STPSourceCardDetails * card = ((STPSource*)paymentContext.selectedPaymentMethod).cardDetails;
             NSString * brand = [STPCard stringFromBrand:card.brand];
             NSString * last4 = card.last4;
             selectedCard = @{

@@ -3,6 +3,7 @@ package com.guidolodetti;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.net.Uri;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.util.Log;
@@ -25,9 +26,13 @@ import com.stripe.android.PaymentConfiguration;
 import com.stripe.android.PaymentSession;
 import com.stripe.android.PaymentSessionConfig;
 import com.stripe.android.PaymentSessionData;
+import com.stripe.android.Stripe;
 import com.stripe.android.model.Card;
 import com.stripe.android.model.Customer;
 import com.stripe.android.model.CustomerSource;
+import com.stripe.android.model.Source;
+import com.stripe.android.model.SourceCardData;
+import com.stripe.android.model.SourceParams;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -43,11 +48,27 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
 
     private Promise initPaymentContextPromise;
 
+    private Source activeSource;
+    private Source activeThreeDSource;
+
+    private Stripe mStripe;
+
     private final ActivityEventListener mActivityEventListener = new BaseActivityEventListener() {
         @Override
         public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data) {
             super.onActivityResult(activity, requestCode, resultCode, data);
-            mPaymentSession.handlePaymentData(requestCode, resultCode, data);
+            if (mPaymentSession != null) {
+                mPaymentSession.handlePaymentData(requestCode, resultCode, data);
+            }
+        }
+
+        @Override
+        public void onNewIntent(Intent intent) {
+            super.onNewIntent(intent);
+
+            Log.d("RNStripe status", activeThreeDSource.getStatus());
+
+            sendEvent("RNStripe3DCheckComplete", null);
         }
     };
 
@@ -56,13 +77,14 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
 
         // Add the listener for `onActivityResult`
         reactContext.addActivityEventListener(mActivityEventListener);
+
+        mStripe = new Stripe(reactContext);
     }
 
     @Override
     public String getName() {
         return "RNStripe";
     }
-
 
     private void sendEvent(String eventName, @Nullable WritableMap params) {
         getReactApplicationContext()
@@ -77,6 +99,8 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
             promise.reject("RNStripePublishableKeyRequired", "A valid Stripe PublishableKey is required");
             return;
         }
+
+        mStripe.setDefaultPublishableKey(publishableKey);
 
         PaymentConfiguration.init(publishableKey);
 
@@ -135,6 +159,66 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
         promise.resolve(true);
     }
 
+    @ReactMethod
+    public void threeDSecureCheck(Double totalPrice) {
+        Log.d("RNStripe price", Double.toString(totalPrice));
+
+        long amount = Double.valueOf(totalPrice * 100).longValue();
+
+        Log.d("RNStripe amount", Long.toString(amount));
+
+        SourceCardData cardData = ((SourceCardData)activeSource.getSourceTypeModel());
+
+        String threeDStatus = cardData.getThreeDSecureStatus();
+        if (SourceCardData.REQUIRED.equals(threeDStatus)) {
+            Log.e("RNStripe 3D REQUIRED", threeDStatus);
+
+            SourceParams threeDParams = SourceParams.createThreeDSecureParams(
+                    amount+100,
+                    "EUR",
+                    "ugo://tickets",
+                    activeSource.getId());
+
+            try {
+                Source threeDSource = mStripe.createSourceSynchronous(threeDParams);
+
+
+
+                CustomerSession.getInstance().addCustomerSource(getReactApplicationContext(), threeDSource.getId(), threeDSource.getType(), new CustomerSession.SourceRetrievalListener() {
+                    @Override
+                    public void onSourceRetrieved(@NonNull Source source) {
+                        Log.d("RNStripe SOURCE", source.getId());
+                        Log.d("RNStripe status", source.getStatus());
+
+                        activeThreeDSource = source;
+
+                        CustomerSession.getInstance().setCustomerDefaultSource(getReactApplicationContext(), source.getId(), source.getType(), null);
+
+                        String url = source.getRedirect().getUrl();
+
+                        Intent browserIntent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+                        getReactApplicationContext().startActivity(browserIntent);
+
+                    }
+
+                    @Override
+                    public void onError(int errorCode, @Nullable String errorMessage) {
+                        Log.e("RNStripe", errorMessage);
+                    }
+                });
+
+            } catch (Exception e) {
+                // TODO: gestione errori
+                Log.e("RNStripe", e.toString());
+
+                sendEvent("RNStripe3DCheckComplete", null);
+            }
+
+        } else {
+            sendEvent("RNStripe3DCheckComplete", null);
+        }
+    }
+
     /**
      * PaymentSessionListener
      */
@@ -164,9 +248,11 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
                             }
                             return;
                         }
-
                         final Card customerCard = displaySource.asCard();
-                        if (customerCard == null) {
+                        final Source customerSource = displaySource.asSource();
+                        activeSource = customerSource;
+
+                        if (customerCard == null && !(customerSource.getSourceTypeModel() instanceof SourceCardData)) {
                             if (initPaymentContextPromise != null) {
                                 initPaymentContextPromise.resolve(null);
                                 initPaymentContextPromise = null;
@@ -175,8 +261,14 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
                         }
 
                         final Map<String, Object> selectedCardDetails = new HashMap<>();
-                        selectedCardDetails.put("brand", customerCard.getBrand());
-                        selectedCardDetails.put("last4", customerCard.getLast4());
+                        if (customerCard != null) {
+                            selectedCardDetails.put("brand", customerCard.getBrand());
+                            selectedCardDetails.put("last4", customerCard.getLast4());
+                        } else {
+                            SourceCardData cardData = ((SourceCardData)customerSource.getSourceTypeModel());
+                            selectedCardDetails.put("brand", cardData.getBrand());
+                            selectedCardDetails.put("last4", cardData.getLast4());
+                        }
                         Log.e("RNStripe", selectedCardDetails.toString());
                         // Send the card information to JS
                         RNStripeModule.this.sendEvent("RNStripeSelectedPaymentMethodDidChange", Arguments.makeNativeMap(selectedCardDetails));

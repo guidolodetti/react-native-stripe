@@ -32,5 +32,5 @@ repositories {
 
 dependencies {
     compile 'com.facebook.react:react-native:+'
-    compile 'com.stripe:stripe-android:6.1.2'
+    compile 'com.stripe:stripe-android:7.1.0'
 }

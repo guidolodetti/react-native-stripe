@@ -60,6 +60,17 @@ class RNStripeManager {
     return RNStripe.presentPaymentMethodsViewController();
   }
 
+  threeDSecureCheck(totalPrice, checkCallback) {
+    RNStripe.threeDSecureCheck(totalPrice);
+
+    this._stripeEventEmitter.addListener(
+      "RNStripe3DCheckComplete",
+      () => {
+        checkCallback()
+      }
+    );
+  }
+
   getCardImageSourceFromBrand(imageBrand) {
     switch (imageBrand) {
       case 'Visa':
