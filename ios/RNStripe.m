@@ -131,10 +131,10 @@ RCT_EXPORT_METHOD(threeDSecureCheck:(double)totalPrice)
     NSLog(@"RNStripe: start threeDSecure check");
     
     STPSource* cardSource = (STPSource*)paymentContext.selectedPaymentMethod;
+    NSLog(@"RNStripe: Card:", cardSource.redirect, cardSource.flow);
     
     if (cardSource.flow == STPSourceFlowRedirect) {
-        
-        NSLog(cardSource.redirect);
+        NSLog(@"Pronti al redirect");
         NSURL* url = cardSource.redirect.url;
         
         redirectContext =[[STPRedirectContext alloc]
@@ -144,9 +144,11 @@ RCT_EXPORT_METHOD(threeDSecureCheck:(double)totalPrice)
                               [self sendEventWithName:@"RNStripe3DCheckComplete" body:NULL];
                           }];
         
-        redirectContext.startSafariAppRedirectFlow;
+        [redirectContext startSafariAppRedirectFlow];
+    } else {
+        [self sendEventWithName:@"RNStripe3DCheckComplete" body:NULL];
     }
-    [self sendEventWithName:@"RNStripe3DCheckComplete" body:NULL];
+//
     
 }
 
@@ -157,6 +159,7 @@ RCT_EXPORT_METHOD(threeDSecureCheck:(double)totalPrice)
     // Checks if a selected method is available
     if (paymentContext.selectedPaymentMethod != nil) {
         if ([paymentContext.selectedPaymentMethod isMemberOfClass:[STPCard class]]) {
+            NSLog(@"RNStripe: is a card");
             STPCard * card = (STPCard*)paymentContext.selectedPaymentMethod;
             NSString * brand = [STPCard stringFromBrand:card.brand];
             NSString * last4 = card.last4;
@@ -168,6 +171,7 @@ RCT_EXPORT_METHOD(threeDSecureCheck:(double)totalPrice)
             [self sendEventWithName:@"RNStripeSelectedPaymentMethodDidChange"
                                body:selectedCard];
         } else if ([paymentContext.selectedPaymentMethod isMemberOfClass:[STPSource class]]) {
+            NSLog(@"RNStripe: is a source");
             STPSourceCardDetails * card = ((STPSource*)paymentContext.selectedPaymentMethod).cardDetails;
             NSString * brand = [STPCard stringFromBrand:card.brand];
             NSString * last4 = card.last4;

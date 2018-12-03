@@ -189,7 +189,7 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
 
                         activeThreeDSource = source;
 
-                        CustomerSession.getInstance().setCustomerDefaultSource(getReactApplicationContext(), source.getId(), source.getType(), null);
+                        //CustomerSession.getInstance().setCustomerDefaultSource(getReactApplicationContext(), source.getId(), source.getType(), null);
 
                         String url = source.getRedirect().getUrl();
 
