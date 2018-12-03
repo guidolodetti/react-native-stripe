@@ -1,5 +1,6 @@
 
 package com.guidolodetti;
+import android.app.Activity;
 import android.content.Intent;
 import android.net.Uri;
 import android.support.annotation.NonNull;
@@ -168,7 +169,7 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
         SourceCardData cardData = ((SourceCardData)activeSource.getSourceTypeModel());
 
         String threeDStatus = cardData.getThreeDSecureStatus();
-        if (SourceCardData.REQUIRED.equals(threeDStatus)) {
+        if (SourceCardData.REQUIRED.equals(threeDStatus) || SourceCardData.OPTIONAL.equals(threeDStatus)) {
             Log.e("RNStripe 3D REQUIRED", threeDStatus);
 
             SourceParams threeDParams = SourceParams.createThreeDSecureParams(
@@ -179,8 +180,6 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
 
             try {
                 Source threeDSource = mStripe.createSourceSynchronous(threeDParams);
-
-
 
                 CustomerSession.getInstance().addCustomerSource(getReactApplicationContext(), threeDSource.getId(), threeDSource.getType(), new CustomerSession.SourceRetrievalListener() {
                     @Override

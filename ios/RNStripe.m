@@ -3,12 +3,17 @@
 #import <React/RCTConvert.h>
 
 @implementation RNStripe {
+    STPCard * activeCard;
+    
     RCTPromiseResolveBlock initPaymentContextPromiseResolver;
 
     STPPaymentContext * paymentContext;
     STPCustomerContext * customerContext;
+    STPRedirectContext * redirectContext;
     STPJSONResponseCompletionBlock customerKeyCompletionBlock;
 }
+
+
 
 RCT_EXPORT_MODULE();
 
@@ -19,7 +24,7 @@ RCT_EXPORT_MODULE();
 
 - (NSArray<NSString *> *)supportedEvents
 {
-    return @[@"RNStripeRequestedCustomerKey", @"RNStripeSelectedPaymentMethodDidChange"];
+    return @[@"RNStripeRequestedCustomerKey", @"RNStripeSelectedPaymentMethodDidChange", @"RNStripe3DCheckComplete"];
 }
 
 RCT_EXPORT_METHOD(initWithOptions:(NSDictionary*)options
@@ -119,6 +124,30 @@ RCT_EXPORT_METHOD(presentPaymentMethodsViewController:(RCTPromiseResolveBlock)re
     [paymentContext presentPaymentMethodsViewController];
 
     resolve(@YES);
+}
+
+RCT_EXPORT_METHOD(threeDSecureCheck:(double)totalPrice)
+{
+    NSLog(@"RNStripe: start threeDSecure check");
+    
+    STPSource* cardSource = (STPSource*)paymentContext.selectedPaymentMethod;
+    
+    if (cardSource.flow == STPSourceFlowRedirect) {
+        
+        NSLog(cardSource.redirect);
+        NSURL* url = cardSource.redirect.url;
+        
+        redirectContext =[[STPRedirectContext alloc]
+                          initWithSource:cardSource
+                          completion:^(NSString * _Nonnull sourceID, NSString * _Nullable clientSecret, NSError * _Nullable error) {
+                              // In caso di errori, la carta viene "semplicemente" rifiutata
+                              [self sendEventWithName:@"RNStripe3DCheckComplete" body:NULL];
+                          }];
+        
+        redirectContext.startSafariAppRedirectFlow;
+    }
+    [self sendEventWithName:@"RNStripe3DCheckComplete" body:NULL];
+    
 }
 
 - (void)paymentContextDidChange:(STPPaymentContext *)paymentContext
