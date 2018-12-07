@@ -8,6 +8,8 @@
     STPPaymentContext * paymentContext;
     STPCustomerContext * customerContext;
     STPJSONResponseCompletionBlock customerKeyCompletionBlock;
+    
+    STPRedirectContext * redirectContext;
 }
 
 RCT_EXPORT_MODULE();
@@ -119,6 +121,49 @@ RCT_EXPORT_METHOD(presentPaymentMethodsViewController:(RCTPromiseResolveBlock)re
     [paymentContext presentPaymentMethodsViewController];
 
     resolve(@YES);
+}
+
+RCT_EXPORT_METHOD(processPaymentIntent:(NSDictionary*)options) {
+    NSLog(@"RNStripe: Process payment intents -> %@ %@", options[@"id"], options[@"client_secret"]);
+    
+    STPSource* card = (STPSource*)paymentContext.selectedPaymentMethod;
+    
+    STPPaymentIntentParams *paymentIntentParams = [[STPPaymentIntentParams alloc] initWithClientSecret:options[@"client_secret"]];
+    paymentIntentParams.sourceId = [card stripeID];
+    paymentIntentParams.returnURL = @"ugostripe://verification-complete";
+    
+    NSLog(@"RNStripe: Creato oggetto paymentIntentParams");
+    
+    [[STPAPIClient sharedClient] confirmPaymentIntentWithParams:paymentIntentParams
+                                                     completion:^(STPPaymentIntent * _Nullable paymentIntent, NSError * _Nullable error) {
+                                                         if (error != nil) {
+                                                             NSLog(@"RNStripe: Errore %@", [error localizedDescription]);
+                                                         } else {
+                                                             NSLog(@"RNStripe: Hurrà! Payment intent funzionato benissssssimo");
+                                                             
+                                                             if (paymentIntent.status == STPPaymentIntentStatusRequiresSourceAction) {
+                                                                 NSLog(@"RNStripe: Hey, serve un redirect");
+                                                                 
+                                                                 redirectContext = [[STPRedirectContext alloc]
+                                                                                    initWithPaymentIntent:paymentIntent
+                                                                                    completion:^(NSString * clientSecret, NSError * _Nullable error) {
+                                                                                        if (error != nil) {
+                                                                                            NSLog(@"RNStripe: Errore #2: %@", [error localizedDescription]);
+                                                                                        } else {
+                                                                                            
+                                                                                        }
+                                                                                                
+                                                                                    }];
+                                                                 
+                                                                 if (redirectContext) {
+                                                                     // opens SFSafariViewController to the necessary URL
+                                                                     [redirectContext startRedirectFlowFromViewController:paymentContext.hostViewController];
+                                                                 }
+                                                             } else if (paymentIntent.status == STPPaymentIntentStatusSucceeded) {
+                                                                 // Pagamento corretto
+                                                             }
+                                                         }
+                                                     }];
 }
 
 - (void)paymentContextDidChange:(STPPaymentContext *)paymentContext

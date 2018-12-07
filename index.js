@@ -77,6 +77,14 @@ class RNStripeManager {
     }
   }
 
+  processPaymentIntent(intent) {
+    console.log("RICEVUTO INTENT")
+    RNStripe.processPaymentIntent({
+      id: intent.id, 
+      client_secret: intent.client_secret
+    })
+  }
+
   _unsubscribePaymentMethodChanges() {
     // Remove paymentMethodSubscription if any
     if (this._paymentMethodSubscription) {
