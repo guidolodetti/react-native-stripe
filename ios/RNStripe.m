@@ -10,6 +10,8 @@
     STPJSONResponseCompletionBlock customerKeyCompletionBlock;
     
     STPRedirectContext * redirectContext;
+    
+    NSTimer * stripeTimer;
 }
 
 RCT_EXPORT_MODULE();
@@ -21,7 +23,7 @@ RCT_EXPORT_MODULE();
 
 - (NSArray<NSString *> *)supportedEvents
 {
-    return @[@"RNStripeRequestedCustomerKey", @"RNStripeSelectedPaymentMethodDidChange"];
+    return @[@"RNStripeRequestedCustomerKey", @"RNStripeSelectedPaymentMethodDidChange", @"RNStripeReadyToChargeIntent"];
 }
 
 RCT_EXPORT_METHOD(initWithOptions:(NSDictionary*)options
@@ -124,13 +126,13 @@ RCT_EXPORT_METHOD(presentPaymentMethodsViewController:(RCTPromiseResolveBlock)re
 }
 
 RCT_EXPORT_METHOD(processPaymentIntent:(NSDictionary*)options) {
-    NSLog(@"RNStripe: Process payment intents -> %@ %@", options[@"id"], options[@"client_secret"]);
+    NSLog(@"RNStripe: Process payment intents -> %@ %@", options[@"client_secret"], options[@"return_url"]);
     
     STPSource* card = (STPSource*)paymentContext.selectedPaymentMethod;
     
     STPPaymentIntentParams *paymentIntentParams = [[STPPaymentIntentParams alloc] initWithClientSecret:options[@"client_secret"]];
     paymentIntentParams.sourceId = [card stripeID];
-    paymentIntentParams.returnURL = @"ugostripe://verification-complete";
+    paymentIntentParams.returnURL = options[@"return_url"];
     
     NSLog(@"RNStripe: Creato oggetto paymentIntentParams");
     
@@ -138,32 +140,74 @@ RCT_EXPORT_METHOD(processPaymentIntent:(NSDictionary*)options) {
                                                      completion:^(STPPaymentIntent * _Nullable paymentIntent, NSError * _Nullable error) {
                                                          if (error != nil) {
                                                              NSLog(@"RNStripe: Errore %@", [error localizedDescription]);
+                                                             
+                                                             [self readyToChargeIntent:true];
                                                          } else {
-                                                             NSLog(@"RNStripe: Hurrà! Payment intent funzionato benissssssimo");
                                                              
                                                              if (paymentIntent.status == STPPaymentIntentStatusRequiresSourceAction) {
-                                                                 NSLog(@"RNStripe: Hey, serve un redirect");
                                                                  
                                                                  redirectContext = [[STPRedirectContext alloc]
                                                                                     initWithPaymentIntent:paymentIntent
                                                                                     completion:^(NSString * clientSecret, NSError * _Nullable error) {
-                                                                                        if (error != nil) {
-                                                                                            NSLog(@"RNStripe: Errore #2: %@", [error localizedDescription]);
-                                                                                        } else {
-                                                                                            
-                                                                                        }
-                                                                                                
+                                                                                        [self waitUntilIntentIsReady:clientSecret];
                                                                                     }];
                                                                  
                                                                  if (redirectContext) {
-                                                                     // opens SFSafariViewController to the necessary URL
-                                                                     [redirectContext startRedirectFlowFromViewController:paymentContext.hostViewController];
+                                                                     // Inform the user it will be redirected
+                                                                     UIAlertController* alertController = [UIAlertController alertControllerWithTitle:options[@"redirect_alert_title"]
+                                                                                                                                              message:options[@"redirect_alert_message"]
+                                                                                                                                       preferredStyle:UIAlertControllerStyleAlert];
+                                                                     
+                                                                     UIAlertAction *ok = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action)
+                                                                                          {
+                                                                                              // opens SFSafariViewController to the necessary URL
+                                                                                              [redirectContext startRedirectFlowFromViewController:paymentContext.hostViewController];
+                                                                                          }];
+                                                                     
+                                                                     [alertController addAction:ok];
+                                                                     [paymentContext.hostViewController presentViewController:alertController animated:YES completion:nil];
+                                                                    
                                                                  }
-                                                             } else if (paymentIntent.status == STPPaymentIntentStatusSucceeded) {
-                                                                 // Pagamento corretto
+                                                             } else {
+                                                                 [self checkIfIntentIsReady:paymentIntent withError:error];
                                                              }
                                                          }
                                                      }];
+}
+
+- (void)waitUntilIntentIsReady:(NSString *)clientSecret
+{
+    [[STPAPIClient sharedClient] retrievePaymentIntentWithClientSecret:clientSecret
+                                                            completion:^(STPPaymentIntent * _Nullable paymentIntent, NSError * _Nullable error) {
+                                                                [self checkIfIntentIsReady:paymentIntent withError:error];
+                                                            }];
+     
+}
+
+-(void)checkIfIntentIsReady:(STPPaymentIntent * _Nullable)paymentIntent withError:(NSError * _Nullable)error
+{
+    if (error != nil) {
+        [self readyToChargeIntent:true];
+    } else if (paymentIntent.status == STPPaymentIntentStatusSucceeded || paymentIntent.status == STPPaymentIntentStatusRequiresCapture) {
+        [self readyToChargeIntent:false];
+    } else if (paymentIntent.status == STPPaymentIntentStatusRequiresConfirmation || paymentIntent.status == STPPaymentIntentStatusProcessing) {
+        // Wait and check again after 1 sec
+        stripeTimer = [NSTimer scheduledTimerWithTimeInterval:1.0f
+                                        repeats:NO
+                                        block:^(NSTimer * _Nonnull timer) {
+                                            [self waitUntilIntentIsReady:paymentIntent.clientSecret];
+                                        }];
+    } else {
+        [self readyToChargeIntent:true]; // Should never happen
+    }
+}
+
+- (void)readyToChargeIntent:(BOOL)error
+{
+    [self sendEventWithName:@"RNStripeReadyToChargeIntent"
+                       body:@{
+                              @"error": @(error)
+                              }];
 }
 
 - (void)paymentContextDidChange:(STPPaymentContext *)paymentContext

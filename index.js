@@ -77,12 +77,25 @@ class RNStripeManager {
     }
   }
 
-  processPaymentIntent(intent) {
-    console.log("RICEVUTO INTENT")
+  processPaymentIntent(clientSecret, returnUrl, alertTitle, alertMessage,readyCallback, errorCallback) {
     RNStripe.processPaymentIntent({
-      id: intent.id, 
-      client_secret: intent.client_secret
+      client_secret: clientSecret,
+      return_url: returnUrl,
+      redirect_alert_title: alertTitle,
+      redirect_alert_message: alertMessage,
     })
+
+    let _readyToChargeCallback = this._stripeEventEmitter.addListener(
+      "RNStripeReadyToChargeIntent",
+      params => {
+          if (params.error) {
+            errorCallback()
+          } else {
+            _readyToChargeCallback.remove()
+            readyCallback()
+          }
+      }
+    );
   }
 
   _unsubscribePaymentMethodChanges() {
