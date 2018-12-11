@@ -2,6 +2,8 @@
 package com.guidolodetti;
 
 import android.app.Activity;
+import android.app.AlertDialog;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.net.Uri;
 import android.os.AsyncTask;
@@ -58,6 +60,7 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
     private Source customerSource;
 
     private PaymentIntentParams paymentIntentParams;
+    private PaymentIntent paymentIntent;
     private ReadableMap paymentIntentOptions;
 
     private final ActivityEventListener mActivityEventListener = new BaseActivityEventListener() {
@@ -187,33 +190,58 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
                     options.getString("client_secret"),
                     options.getString("return_url")
             );
+        } else {
+            // Errore
+            readyToChargeIntent(true);
+            return;
         }
 
-         // Essendo una chiamata sincrona non può stare sul main thread
+        confirmPaymentIntent();
+    }
+
+    private void confirmPaymentIntent() {
+        // Essendo una chiamata sincrona non può stare sul main thread
         AsyncTask.execute(new Runnable() {
             @Override
             public void run() {
-            try {
-                PaymentIntent paymentIntent = mStripe.confirmPaymentIntentSynchronous(
-                        paymentIntentParams,
-                        stripePublishableKey
-                );
+                try {
+                    paymentIntent = mStripe.confirmPaymentIntentSynchronous(
+                            paymentIntentParams,
+                            stripePublishableKey
+                    );
 
-                // Redirect al browser se necessario
-                if (paymentIntent.getStatus().equals("requires_source_action")) {
-                    Uri authorizationUrl = paymentIntent.getAuthorizationUrl();
-                    if (authorizationUrl != null) {
-                        Intent browserIntent = new Intent(Intent.ACTION_VIEW, paymentIntent.getAuthorizationUrl());
-                        getReactApplicationContext().startActivity(browserIntent);
+                    // Redirect al browser se necessario
+                    if (paymentIntent.getStatus().equals("requires_source_action")) {
+                        // Torno sull'UI thread dovendo mostrare un alert
+                        getCurrentActivity().runOnUiThread(new Runnable() {
+                            @Override
+                            public void run() {
+                                AlertDialog.Builder builder = new AlertDialog.Builder(getCurrentActivity());
+                                builder.setMessage(paymentIntentOptions.getString("redirect_alert_message"))
+                                        .setCancelable(false)
+                                        .setPositiveButton("OK", new DialogInterface.OnClickListener() {
+                                            public void onClick(DialogInterface dialog, int id) {
+
+                                                Uri authorizationUrl = paymentIntent.getAuthorizationUrl();
+                                                if (authorizationUrl != null) {
+                                                    Intent browserIntent = new Intent(Intent.ACTION_VIEW, paymentIntent.getAuthorizationUrl());
+                                                    getReactApplicationContext().startActivity(browserIntent);
+                                                }
+                                            }
+                                        });
+                                AlertDialog alert = builder.create();
+                                alert.show();
+                            }
+                        });
+
+                    } else {
+                        checkIfIntentIsReady(paymentIntent);
                     }
-                } else {
-                    checkIfIntentIsReady(paymentIntent);
-                }
 
-            } catch (Exception e) {
-                Log.e("RNStripe", e.getLocalizedMessage());
-                readyToChargeIntent(true);
-            }
+                } catch (Exception e) {
+                    Log.e("RNStripe", e.getLocalizedMessage());
+                    readyToChargeIntent(true);
+                }
             }
         });
     }
@@ -224,7 +252,7 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
             public void run() {
                 try {
                     paymentIntentParams = PaymentIntentParams.createRetrievePaymentIntentParams(paymentIntentOptions.getString("client_secret"));
-                    PaymentIntent paymentIntent = mStripe.retrievePaymentIntentSynchronous(paymentIntentParams, stripePublishableKey);
+                    paymentIntent = mStripe.retrievePaymentIntentSynchronous(paymentIntentParams, stripePublishableKey);
 
                     checkIfIntentIsReady(paymentIntent);
 
