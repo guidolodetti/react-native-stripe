@@ -3,6 +3,8 @@ package com.guidolodetti;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.net.Uri;
+import android.os.AsyncTask;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.util.Log;
@@ -25,11 +27,15 @@ import com.stripe.android.PaymentConfiguration;
 import com.stripe.android.PaymentSession;
 import com.stripe.android.PaymentSessionConfig;
 import com.stripe.android.PaymentSessionData;
+import com.stripe.android.Stripe;
 import com.stripe.android.model.Card;
 import com.stripe.android.model.Customer;
 import com.stripe.android.model.CustomerSource;
+import com.stripe.android.model.PaymentIntent;
+import com.stripe.android.model.PaymentIntentParams;
 import com.stripe.android.model.Source;
 import com.stripe.android.model.SourceCardData;
+import com.stripe.android.model.SourceParams;
 
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -45,6 +51,15 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
 
     private Promise initPaymentContextPromise;
 
+    private Stripe mStripe;
+    private String stripePublishableKey;
+
+    private Card customerCard;
+    private Source customerSource;
+
+    private PaymentIntentParams paymentIntentParams;
+    private ReadableMap paymentIntentOptions;
+
     private final ActivityEventListener mActivityEventListener = new BaseActivityEventListener() {
         @Override
         public void onActivityResult(Activity activity, int requestCode, int resultCode, Intent data) {
@@ -52,6 +67,14 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
             if (mPaymentSession != null) {
                 mPaymentSession.handlePaymentData(requestCode, resultCode, data);
             }
+        }
+
+        @Override
+        public void onNewIntent(Intent intent) {
+            super.onNewIntent(intent);
+
+            Log.d("RNStripe", "Ricevuto intent" );
+            waitUntilIntentIsReady();
         }
     };
 
@@ -81,6 +104,10 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
             promise.reject("RNStripePublishableKeyRequired", "A valid Stripe PublishableKey is required");
             return;
         }
+
+        stripePublishableKey = publishableKey;
+
+        mStripe = new Stripe(getReactApplicationContext(), publishableKey);
 
         PaymentConfiguration.init(publishableKey);
 
@@ -139,6 +166,101 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
         promise.resolve(true);
     }
 
+    @ReactMethod
+    public void processPaymentIntent(ReadableMap options) {
+
+        paymentIntentOptions = options; // Le lego alla classe per potervi accedere nell'asynctask
+        if (customerCard != null) {
+            Log.d("RNStripe", "customerCard");
+
+            SourceParams cardSourceParams = SourceParams.createCardParams(customerCard);
+            paymentIntentParams = PaymentIntentParams.createConfirmPaymentIntentWithSourceDataParams(
+                    cardSourceParams,
+                    options.getString("client_secret"),
+                    options.getString("return_url")
+            );
+        } else if (customerSource != null) {
+            Log.d("RNStripe", "customerSource");
+
+            paymentIntentParams = PaymentIntentParams.createConfirmPaymentIntentWithSourceIdParams(
+                    customerSource.getId(),
+                    options.getString("client_secret"),
+                    options.getString("return_url")
+            );
+        }
+
+         // Essendo una chiamata sincrona non può stare sul main thread
+        AsyncTask.execute(new Runnable() {
+            @Override
+            public void run() {
+            try {
+                PaymentIntent paymentIntent = mStripe.confirmPaymentIntentSynchronous(
+                        paymentIntentParams,
+                        stripePublishableKey
+                );
+
+                // Redirect al browser se necessario
+                if (paymentIntent.getStatus().equals("requires_source_action")) {
+                    Uri authorizationUrl = paymentIntent.getAuthorizationUrl();
+                    if (authorizationUrl != null) {
+                        Intent browserIntent = new Intent(Intent.ACTION_VIEW, paymentIntent.getAuthorizationUrl());
+                        getReactApplicationContext().startActivity(browserIntent);
+                    }
+                } else {
+                    checkIfIntentIsReady(paymentIntent);
+                }
+
+            } catch (Exception e) {
+                Log.e("RNStripe", e.getLocalizedMessage());
+                readyToChargeIntent(true);
+            }
+            }
+        });
+    }
+
+    private void waitUntilIntentIsReady() {
+        AsyncTask.execute(new Runnable() {
+            @Override
+            public void run() {
+                try {
+                    paymentIntentParams = PaymentIntentParams.createRetrievePaymentIntentParams(paymentIntentOptions.getString("client_secret"));
+                    PaymentIntent paymentIntent = mStripe.retrievePaymentIntentSynchronous(paymentIntentParams, stripePublishableKey);
+
+                    checkIfIntentIsReady(paymentIntent);
+
+                } catch (Exception e) {
+                    Log.e("RNStripe", e.getLocalizedMessage());
+                    readyToChargeIntent(true);
+                }
+            }
+        });
+    }
+
+    private void checkIfIntentIsReady(PaymentIntent intent) {
+
+        if (intent.getStatus().equals("succeeded") || intent.getStatus().equals("requires_capture")) {
+            readyToChargeIntent(false);
+        } else if (intent.getStatus().equals("processing") || intent.getStatus().equals("requires_confirmation")) {
+            try {
+                Thread.sleep(1000);
+            } catch( InterruptedException e) {
+                waitUntilIntentIsReady();
+            }
+            waitUntilIntentIsReady();
+
+        } else {
+            // Stati che non dovrebbe mai raggiungere a questo punto, facciamo fallire il pagamento
+            readyToChargeIntent(true);
+        }
+    }
+
+    private void readyToChargeIntent(boolean error) {
+        final Map<String, Object> eventParams = new HashMap<>();
+        eventParams.put("error", error);
+
+        sendEvent("RNStripeReadyToChargeIntent", Arguments.makeNativeMap(eventParams));
+    }
+
     /**
      * PaymentSessionListener
      */
@@ -169,8 +291,8 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
                             return;
                         }
 
-                        final Card customerCard = displaySource.asCard();
-                        final Source customerSource = displaySource.asSource();
+                        customerCard = displaySource.asCard();
+                        customerSource = displaySource.asSource();
                         if (customerCard == null && !(customerSource.getSourceTypeModel() instanceof SourceCardData)) {
                             if (initPaymentContextPromise != null) {
                                 initPaymentContextPromise.resolve(null);
@@ -184,7 +306,7 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
                             selectedCardDetails.put("brand", customerCard.getBrand());
                             selectedCardDetails.put("last4", customerCard.getLast4());
                         } else {
-                            SourceCardData cardData = ((SourceCardData)customerSource.getSourceTypeModel());
+                            SourceCardData cardData = ((SourceCardData) customerSource.getSourceTypeModel());
                             selectedCardDetails.put("brand", cardData.getBrand());
                             selectedCardDetails.put("last4", cardData.getLast4());
                         }
