@@ -77,25 +77,32 @@ class RNStripeManager {
     }
   }
 
-  processPaymentIntent(clientSecret, returnUrl, alertTitle, alertMessage,readyCallback, errorCallback) {
+  processPaymentIntent(clientSecret, returnUrl, callback) {
     RNStripe.processPaymentIntent({
       client_secret: clientSecret,
       return_url: returnUrl,
-      redirect_alert_title: alertTitle,
-      redirect_alert_message: alertMessage,
     })
 
-    let _readyToChargeCallback = this._stripeEventEmitter.addListener(
-      "RNStripeReadyToChargeIntent",
+    let _paymentIntentStatusChanged = this._stripeEventEmitter.addListener(
+      "RNStripePaymentIntentStatusChanged",
       params => {
-          if (params.error) {
-            errorCallback()
-          } else {
-            _readyToChargeCallback.remove()
-            readyCallback()
-          }
+        if (params.status) {
+          var status = params.status
+        } else {
+          var status = 'error'
+        }
+
+        callback(status)
+
+        if (status !== 'shouldRedirect') {
+          _paymentIntentStatusChanged.remove()
+        }
       }
     );
+  }
+
+  performPaymentIntentRedirect() {
+    RNStripe.performPaymentIntentRedirect()
   }
 
   _unsubscribePaymentMethodChanges() {

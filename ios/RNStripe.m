@@ -10,6 +10,7 @@
     STPJSONResponseCompletionBlock customerKeyCompletionBlock;
     
     STPRedirectContext * redirectContext;
+    STPPaymentIntent * activePaymentIntent;
     
     NSTimer * stripeTimer;
 }
@@ -23,7 +24,7 @@ RCT_EXPORT_MODULE();
 
 - (NSArray<NSString *> *)supportedEvents
 {
-    return @[@"RNStripeRequestedCustomerKey", @"RNStripeSelectedPaymentMethodDidChange", @"RNStripeReadyToChargeIntent"];
+    return @[@"RNStripeRequestedCustomerKey", @"RNStripeSelectedPaymentMethodDidChange", @"RNStripePaymentIntentStatusChanged"];
 }
 
 RCT_EXPORT_METHOD(initWithOptions:(NSDictionary*)options
@@ -138,41 +139,33 @@ RCT_EXPORT_METHOD(processPaymentIntent:(NSDictionary*)options) {
     
     [[STPAPIClient sharedClient] confirmPaymentIntentWithParams:paymentIntentParams
                                                      completion:^(STPPaymentIntent * _Nullable paymentIntent, NSError * _Nullable error) {
+                                                         activePaymentIntent = paymentIntent;
                                                          if (error != nil) {
                                                              NSLog(@"RNStripe: Errore %@", [error localizedDescription]);
                                                              
-                                                             [self readyToChargeIntent:true];
+                                                             [self paymentIntentStatusChange:@"error"];
                                                          } else {
                                                              
                                                              if (paymentIntent.status == STPPaymentIntentStatusRequiresSourceAction) {
+                                                                 [self paymentIntentStatusChange:@"shouldRedirect"];
                                                                  
-                                                                 redirectContext = [[STPRedirectContext alloc]
-                                                                                    initWithPaymentIntent:paymentIntent
-                                                                                    completion:^(NSString * clientSecret, NSError * _Nullable error) {
-                                                                                        [self waitUntilIntentIsReady:clientSecret];
-                                                                                    }];
-                                                                 
-                                                                 if (redirectContext) {
-                                                                     // Inform the user it will be redirected
-                                                                     UIAlertController* alertController = [UIAlertController alertControllerWithTitle:options[@"redirect_alert_title"]
-                                                                                                                                              message:options[@"redirect_alert_message"]
-                                                                                                                                       preferredStyle:UIAlertControllerStyleAlert];
-                                                                     
-                                                                     UIAlertAction *ok = [UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:^(UIAlertAction * _Nonnull action)
-                                                                                          {
-                                                                                              // opens SFSafariViewController to the necessary URL
-                                                                                              [redirectContext startRedirectFlowFromViewController:paymentContext.hostViewController];
-                                                                                          }];
-                                                                     
-                                                                     [alertController addAction:ok];
-                                                                     [paymentContext.hostViewController presentViewController:alertController animated:YES completion:nil];
-                                                                    
-                                                                 }
                                                              } else {
                                                                  [self checkIfIntentIsReady:paymentIntent withError:error];
                                                              }
                                                          }
                                                      }];
+}
+
+RCT_EXPORT_METHOD(performPaymentIntentRedirect) {
+    redirectContext = [[STPRedirectContext alloc]
+                       initWithPaymentIntent:activePaymentIntent
+                       completion:^(NSString * clientSecret, NSError * _Nullable error) {
+                           [self waitUntilIntentIsReady:clientSecret];
+                       }];
+    
+    if (redirectContext) {
+        [redirectContext startRedirectFlowFromViewController:paymentContext.hostViewController];
+    }
 }
 
 - (void)waitUntilIntentIsReady:(NSString *)clientSecret
@@ -181,15 +174,15 @@ RCT_EXPORT_METHOD(processPaymentIntent:(NSDictionary*)options) {
                                                             completion:^(STPPaymentIntent * _Nullable paymentIntent, NSError * _Nullable error) {
                                                                 [self checkIfIntentIsReady:paymentIntent withError:error];
                                                             }];
-     
 }
 
 -(void)checkIfIntentIsReady:(STPPaymentIntent * _Nullable)paymentIntent withError:(NSError * _Nullable)error
 {
+    activePaymentIntent = paymentIntent;
     if (error != nil) {
-        [self readyToChargeIntent:true];
+        [self paymentIntentStatusChange:@"error"];
     } else if (paymentIntent.status == STPPaymentIntentStatusSucceeded || paymentIntent.status == STPPaymentIntentStatusRequiresCapture) {
-        [self readyToChargeIntent:false];
+        [self paymentIntentStatusChange:@"success"];
     } else if (paymentIntent.status == STPPaymentIntentStatusRequiresConfirmation || paymentIntent.status == STPPaymentIntentStatusProcessing) {
         // Wait and check again after 1 sec
         stripeTimer = [NSTimer scheduledTimerWithTimeInterval:1.0f
@@ -198,15 +191,15 @@ RCT_EXPORT_METHOD(processPaymentIntent:(NSDictionary*)options) {
                                             [self waitUntilIntentIsReady:paymentIntent.clientSecret];
                                         }];
     } else {
-        [self readyToChargeIntent:true]; // Should never happen
+        [self paymentIntentStatusChange:@"error"]; // Should never happen
     }
 }
 
-- (void)readyToChargeIntent:(BOOL)error
+- (void)paymentIntentStatusChange:(NSString *)status
 {
-    [self sendEventWithName:@"RNStripeReadyToChargeIntent"
+    [self sendEventWithName:@"RNStripePaymentIntentStatusChanged"
                        body:@{
-                              @"error": @(error)
+                              @"status": status
                               }];
 }
 

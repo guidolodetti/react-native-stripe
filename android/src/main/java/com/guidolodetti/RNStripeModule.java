@@ -76,7 +76,6 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
         public void onNewIntent(Intent intent) {
             super.onNewIntent(intent);
 
-            Log.d("RNStripe", "Ricevuto intent" );
             waitUntilIntentIsReady();
         }
     };
@@ -192,14 +191,30 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
             );
         } else {
             // Errore
-            readyToChargeIntent(true);
+            paymentIntentStatusChange("error");
             return;
         }
 
         confirmPaymentIntent();
     }
 
+    @ReactMethod
+    public void performPaymentIntentRedirect() {
+        getCurrentActivity().runOnUiThread(new Runnable() {
+            @Override
+            public void run() {
+                Uri authorizationUrl = paymentIntent.getAuthorizationUrl();
+                if (authorizationUrl != null) {
+                    Intent browserIntent = new Intent(Intent.ACTION_VIEW, paymentIntent.getAuthorizationUrl());
+                    getReactApplicationContext().startActivity(browserIntent);
+                }
+            }
+        });
+    }
+
     private void confirmPaymentIntent() {
+
+        Log.d("RNStripe", "conferma intent");
         // Essendo una chiamata sincrona non può stare sul main thread
         AsyncTask.execute(new Runnable() {
             @Override
@@ -213,26 +228,7 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
                     // Redirect al browser se necessario
                     if (paymentIntent.getStatus().equals("requires_source_action")) {
                         // Torno sull'UI thread dovendo mostrare un alert
-                        getCurrentActivity().runOnUiThread(new Runnable() {
-                            @Override
-                            public void run() {
-                                AlertDialog.Builder builder = new AlertDialog.Builder(getCurrentActivity());
-                                builder.setMessage(paymentIntentOptions.getString("redirect_alert_message"))
-                                        .setCancelable(false)
-                                        .setPositiveButton("OK", new DialogInterface.OnClickListener() {
-                                            public void onClick(DialogInterface dialog, int id) {
-
-                                                Uri authorizationUrl = paymentIntent.getAuthorizationUrl();
-                                                if (authorizationUrl != null) {
-                                                    Intent browserIntent = new Intent(Intent.ACTION_VIEW, paymentIntent.getAuthorizationUrl());
-                                                    getReactApplicationContext().startActivity(browserIntent);
-                                                }
-                                            }
-                                        });
-                                AlertDialog alert = builder.create();
-                                alert.show();
-                            }
-                        });
+                        paymentIntentStatusChange("shouldRedirect");
 
                     } else {
                         checkIfIntentIsReady(paymentIntent);
@@ -240,7 +236,7 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
 
                 } catch (Exception e) {
                     Log.e("RNStripe", e.getLocalizedMessage());
-                    readyToChargeIntent(true);
+                    paymentIntentStatusChange("error");
                 }
             }
         });
@@ -258,7 +254,7 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
 
                 } catch (Exception e) {
                     Log.e("RNStripe", e.getLocalizedMessage());
-                    readyToChargeIntent(true);
+                    paymentIntentStatusChange("error");
                 }
             }
         });
@@ -267,7 +263,7 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
     private void checkIfIntentIsReady(PaymentIntent intent) {
 
         if (intent.getStatus().equals("succeeded") || intent.getStatus().equals("requires_capture")) {
-            readyToChargeIntent(false);
+            paymentIntentStatusChange("success");
         } else if (intent.getStatus().equals("processing") || intent.getStatus().equals("requires_confirmation")) {
             try {
                 Thread.sleep(1000);
@@ -278,15 +274,15 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
 
         } else {
             // Stati che non dovrebbe mai raggiungere a questo punto, facciamo fallire il pagamento
-            readyToChargeIntent(true);
+            paymentIntentStatusChange("error");
         }
     }
 
-    private void readyToChargeIntent(boolean error) {
+    private void paymentIntentStatusChange(String status) {
         final Map<String, Object> eventParams = new HashMap<>();
-        eventParams.put("error", error);
+        eventParams.put("status", status);
 
-        sendEvent("RNStripeReadyToChargeIntent", Arguments.makeNativeMap(eventParams));
+        sendEvent("RNStripePaymentIntentStatusChanged", Arguments.makeNativeMap(eventParams));
     }
 
     /**
