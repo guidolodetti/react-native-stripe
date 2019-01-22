@@ -76,7 +76,17 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
         public void onNewIntent(Intent intent) {
             super.onNewIntent(intent);
 
-            waitUntilIntentIsReady();
+            if (intent.getData() != null && intent.getData().getQuery() != null) {
+
+                Log.d("RNStripe", intent.getDataString());
+
+                String clientSecret = intent.getData().getQueryParameter("payment_intent_client_secret");
+                String intentId = intent.getData().getQueryParameter("payment_intent");
+
+                if (clientSecret != null && intentId != null) {
+                    waitUntilIntentIsReady();
+                }
+            }
         }
     };
 
@@ -182,7 +192,7 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
                     options.getString("return_url")
             );
         } else if (customerSource != null) {
-            Log.d("RNStripe", "customerSource");
+            Log.d("RNStripe", "customerSource..");
 
             paymentIntentParams = PaymentIntentParams.createConfirmPaymentIntentWithSourceIdParams(
                     customerSource.getId(),
@@ -214,7 +224,6 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
 
     private void confirmPaymentIntent() {
 
-        Log.d("RNStripe", "conferma intent");
         // Essendo una chiamata sincrona non può stare sul main thread
         AsyncTask.execute(new Runnable() {
             @Override
@@ -243,6 +252,7 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
     }
 
     private void waitUntilIntentIsReady() {
+        Log.d("RNStripe", "waitUntilIsReady");
         AsyncTask.execute(new Runnable() {
             @Override
             public void run() {
@@ -261,6 +271,7 @@ public class RNStripeModule extends ReactContextBaseJavaModule implements Paymen
     }
 
     private void checkIfIntentIsReady(PaymentIntent intent) {
+        Log.d("RNStripe", intent.getStatus());
 
         if (intent.getStatus().equals("succeeded") || intent.getStatus().equals("requires_capture")) {
             paymentIntentStatusChange("success");
